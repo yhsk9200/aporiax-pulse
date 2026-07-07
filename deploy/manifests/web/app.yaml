@@ -1,0 +1,90 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: product-pulse-web
+  namespace: product-pulse
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: product-pulse-web
+  namespace: product-pulse
+  labels:
+    app.kubernetes.io/name: product-pulse-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: product-pulse-web
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: product-pulse-web
+    spec:
+      serviceAccountName: product-pulse-web
+      containers:
+        - name: web
+          image: ghcr.io/yhsk9200/aporiax-pulse:sha-cb96f1c80336
+          ports:
+            - containerPort: 3000
+          env:
+            # Read-only k8s API access to ArgoCD Application CRs is granted by
+            # the platform repo (Role+RoleBinding into argocd ns) — this repo
+            # only declares its own ServiceAccount, never cross-namespace RBAC.
+            - name: PROMETHEUS_URL
+              value: http://platform-monitoring-promet-prometheus.platform-monitoring.svc.cluster.local:9090
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: product-pulse-web
+  namespace: product-pulse
+spec:
+  selector:
+    app.kubernetes.io/name: product-pulse-web
+  ports:
+    - port: 3000
+      targetPort: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: product-pulse-web
+  namespace: product-pulse
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: traefik
+  tls:
+    - secretName: product-pulse-web-tls
+      hosts:
+        - pulse.aporiax.duckdns.org
+  rules:
+    - host: pulse.aporiax.duckdns.org
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: product-pulse-web
+                port:
+                  number: 3000
