@@ -5,7 +5,7 @@ const PROM_URL = process.env.PROMETHEUS_URL;
 async function promQuery(query: string): Promise<number | null> {
   const res = await fetch(`${PROM_URL}/api/v1/query?query=${encodeURIComponent(query)}`, {
     signal: AbortSignal.timeout(5000),
-    cache: "no-store",
+    next: { revalidate: 60 },
   });
   if (!res.ok) throw new Error(`prometheus responded ${res.status}`);
   const json = await res.json();
