@@ -22,3 +22,19 @@ export interface CertStatus {
   validTo: string | null;
   error?: string;
 }
+
+export interface RevisionRef {
+  display: string;
+  href?: string;
+}
+
+export interface DeployEvent {
+  app: string;
+  deployedAt: string;
+  revisions: RevisionRef[];
+}
+
+export interface AlertSummary {
+  total: number;
+  bySeverity: Record<string, number>;
+}
