@@ -33,6 +33,8 @@ spec:
             # only declares its own ServiceAccount, never cross-namespace RBAC.
             - name: PROMETHEUS_URL
               value: http://platform-monitoring-promet-prometheus.platform-monitoring.svc.cluster.local:9090
+            - name: ALERTMANAGER_URL
+              value: http://platform-monitoring-promet-alertmanager.platform-monitoring.svc.cluster.local:9093
           resources:
             requests:
               cpu: 50m

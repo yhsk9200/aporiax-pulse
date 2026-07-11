@@ -1,8 +1,10 @@
 import fs from "node:fs";
 import https from "node:https";
-import type { ArgoApp, DataResult } from "./types";
+import { cache } from "react";
+import type { ArgoApp, DataResult, DeployEvent, RevisionRef } from "./types";
 
 const SA_DIR = "/var/run/secrets/kubernetes.io/serviceaccount";
+const SHA_RE = /^[0-9a-f]{40}$/;
 
 function readInClusterAuth(): { token: string; ca: Buffer } | null {
   try {
@@ -20,16 +22,33 @@ function k8sApiBase(): string | null {
   return host ? `https://${host}:${port}` : null;
 }
 
+interface RawSource {
+  repoURL: string;
+}
+
+interface RawHistoryEntry {
+  revision?: string;
+  revisions?: string[];
+  deployedAt?: string;
+}
+
 interface RawApplication {
   metadata: { name: string; namespace: string };
-  status?: { sync?: { status?: string }; health?: { status?: string } };
+  spec?: { source?: RawSource; sources?: RawSource[] };
+  status?: {
+    sync?: { status?: string };
+    health?: { status?: string };
+    history?: RawHistoryEntry[];
+  };
 }
 
 // Applications CRs are read via the standard k8s API using the pod's own
 // ServiceAccount token — this avoids provisioning a separate ArgoCD API
 // account/token and reuses ordinary namespaced RBAC (Role+RoleBinding into
-// argocd ns, get/list on applications.argoproj.io).
-export async function fetchArgoApplications(): Promise<DataResult<ArgoApp[]>> {
+// argocd ns, get/list on applications.argoproj.io). Wrapped in React cache()
+// so fetchArgoApplications and fetchDeployEvents share ONE request per
+// render pass instead of hitting the API twice.
+const fetchArgoApplicationsRaw = cache(async (): Promise<DataResult<RawApplication[]>> => {
   const auth = readInClusterAuth();
   const base = k8sApiBase();
   if (!auth || !base) {
@@ -52,13 +71,7 @@ export async function fetchArgoApplications(): Promise<DataResult<ArgoApp[]>> {
           }
           try {
             const parsed: { items: RawApplication[] } = JSON.parse(body);
-            const apps: ArgoApp[] = parsed.items.map((item) => ({
-              name: item.metadata.name,
-              namespace: item.metadata.namespace,
-              sync: (item.status?.sync?.status as ArgoApp["sync"]) ?? "Unknown",
-              health: (item.status?.health?.status as ArgoApp["health"]) ?? "Unknown",
-            }));
-            resolve({ ok: true, data: apps });
+            resolve({ ok: true, data: parsed.items });
           } catch {
             resolve({ ok: false, reason: "failed to parse Application list" });
           }
@@ -71,4 +84,54 @@ export async function fetchArgoApplications(): Promise<DataResult<ArgoApp[]>> {
     });
     req.on("error", (err) => resolve({ ok: false, reason: `k8s API request failed: ${err.message}` }));
   });
+});
+
+export async function fetchArgoApplications(): Promise<DataResult<ArgoApp[]>> {
+  const raw = await fetchArgoApplicationsRaw();
+  if (!raw.ok) return raw;
+  const apps: ArgoApp[] = raw.data.map((item) => ({
+    name: item.metadata.name,
+    namespace: item.metadata.namespace,
+    sync: (item.status?.sync?.status as ArgoApp["sync"]) ?? "Unknown",
+    health: (item.status?.health?.status as ArgoApp["health"]) ?? "Unknown",
+  }));
+  return { ok: true, data: apps };
+}
+
+function stripGitSuffix(url: string): string {
+  return url.replace(/\.git$/, "");
+}
+
+function toRevisionRef(revision: string, repoURL: string | undefined): RevisionRef {
+  if (repoURL && SHA_RE.test(revision)) {
+    return { display: revision.slice(0, 7), href: `${stripGitSuffix(repoURL)}/commit/${revision}` };
+  }
+  return { display: SHA_RE.test(revision) ? revision.slice(0, 7) : `chart ${revision}` };
+}
+
+// Multi-source Applications (e.g. a Bitnami chart + this repo's values) carry
+// history[].revisions[] index-aligned with spec.sources[] instead of a single
+// history[].revision — only entries that parse as a 40-char SHA get a commit
+// link, chart versions render as plain text.
+export async function fetchDeployEvents(): Promise<DataResult<DeployEvent[]>> {
+  const raw = await fetchArgoApplicationsRaw();
+  if (!raw.ok) return raw;
+
+  const events: DeployEvent[] = [];
+  for (const item of raw.data) {
+    const history = item.status?.history;
+    if (!history?.length) continue;
+    const sources = item.spec?.sources ?? (item.spec?.source ? [item.spec.source] : []);
+    for (const entry of history) {
+      if (!entry.deployedAt) continue;
+      const revisions: RevisionRef[] = entry.revision
+        ? [toRevisionRef(entry.revision, sources[0]?.repoURL)]
+        : (entry.revisions ?? []).map((rev, i) => toRevisionRef(rev, sources[i]?.repoURL));
+      if (!revisions.length) continue;
+      events.push({ app: item.metadata.name, deployedAt: entry.deployedAt, revisions });
+    }
+  }
+
+  events.sort((a, b) => (a.deployedAt < b.deployedAt ? 1 : -1));
+  return { ok: true, data: events.slice(0, 8) };
 }
