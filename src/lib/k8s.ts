@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import https from "node:https";
+import { cache } from "react";
 import type { ArgoApp, DataResult, DeployEvent, RevisionRef } from "./types";
 
 const SA_DIR = "/var/run/secrets/kubernetes.io/serviceaccount";
@@ -44,9 +45,10 @@ interface RawApplication {
 // Applications CRs are read via the standard k8s API using the pod's own
 // ServiceAccount token — this avoids provisioning a separate ArgoCD API
 // account/token and reuses ordinary namespaced RBAC (Role+RoleBinding into
-// argocd ns, get/list on applications.argoproj.io). Shared by
-// fetchArgoApplications and fetchDeployEvents so both draw from one request.
-async function fetchArgoApplicationsRaw(): Promise<DataResult<RawApplication[]>> {
+// argocd ns, get/list on applications.argoproj.io). Wrapped in React cache()
+// so fetchArgoApplications and fetchDeployEvents share ONE request per
+// render pass instead of hitting the API twice.
+const fetchArgoApplicationsRaw = cache(async (): Promise<DataResult<RawApplication[]>> => {
   const auth = readInClusterAuth();
   const base = k8sApiBase();
   if (!auth || !base) {
@@ -82,7 +84,7 @@ async function fetchArgoApplicationsRaw(): Promise<DataResult<RawApplication[]>>
     });
     req.on("error", (err) => resolve({ ok: false, reason: `k8s API request failed: ${err.message}` }));
   });
-}
+});
 
 export async function fetchArgoApplications(): Promise<DataResult<ArgoApp[]>> {
   const raw = await fetchArgoApplicationsRaw();

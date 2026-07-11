@@ -14,6 +14,7 @@ export interface TopologyEdge {
   from: string;
   to: string;
   kind: EdgeKind;
+  labelT?: number; // 0..1 position of the label along a cross-column edge (default 0.5) — used to dodge label collisions in dense regions
 }
 
 // Layout is a fixed grid (col = left-to-right tier, row = vertical slot within
@@ -41,7 +42,7 @@ export const TOPOLOGY_EDGES: TopologyEdge[] = [
   { from: "traefik", to: "grafana", kind: "ingress" },
   { from: "traefik", to: "keycloak", kind: "ingress" },
   { from: "pulse", to: "prometheus", kind: "query" },
-  { from: "pulse", to: "k8s-api", kind: "read" },
+  { from: "pulse", to: "k8s-api", kind: "read", labelT: 0.8 },
   { from: "grafana", to: "prometheus", kind: "query" },
   { from: "grafana", to: "keycloak", kind: "oidc" },
   { from: "keycloak", to: "postgres", kind: "db" },

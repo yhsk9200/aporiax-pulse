@@ -22,7 +22,11 @@ function pos(node: TopologyNode) {
   return { x: COL_X[node.col], y: ROW_Y[node.row] };
 }
 
-function edgeGeometry(from: TopologyNode, to: TopologyNode): { path: string; labelX: number; labelY: number } {
+function edgeGeometry(
+  from: TopologyNode,
+  to: TopologyNode,
+  labelT = 0.5,
+): { path: string; labelX: number; labelY: number } {
   const a = pos(from);
   const b = pos(to);
   if (from.col === to.col) {
@@ -33,10 +37,12 @@ function edgeGeometry(from: TopologyNode, to: TopologyNode): { path: string; lab
       labelY: (a.y + b.y) / 2,
     };
   }
+  const startX = a.x + BOX_W / 2;
+  const endX = b.x - BOX_W / 2;
   return {
-    path: `M ${a.x + BOX_W / 2} ${a.y} L ${b.x - BOX_W / 2} ${b.y}`,
-    labelX: (a.x + b.x) / 2,
-    labelY: (a.y + b.y) / 2,
+    path: `M ${startX} ${a.y} L ${endX} ${b.y}`,
+    labelX: startX + (endX - startX) * labelT,
+    labelY: a.y + (b.y - a.y) * labelT,
   };
 }
 
@@ -67,7 +73,7 @@ export function TopologyGraph({ result }: { result: DataResult<ArgoApp[]> }) {
             const from = nodeById.get(edge.from);
             const to = nodeById.get(edge.to);
             if (!from || !to) return null;
-            const { path, labelX, labelY } = edgeGeometry(from, to);
+            const { path, labelX, labelY } = edgeGeometry(from, to, edge.labelT);
             return (
               <g key={`${edge.from}-${edge.to}`}>
                 <path

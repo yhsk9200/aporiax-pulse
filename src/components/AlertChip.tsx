@@ -21,6 +21,7 @@ export function AlertChip({ result }: { result: DataResult<AlertSummary> }) {
   return (
     <span className={`rounded-full px-3 py-1 text-xs font-medium ${color}`}>
       {total} active alert{total === 1 ? "" : "s"}
+      {critical > 0 ? ` (${critical} critical)` : ""}
     </span>
   );
 }
