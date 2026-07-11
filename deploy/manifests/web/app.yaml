@@ -24,7 +24,7 @@ spec:
       serviceAccountName: product-pulse-web
       containers:
         - name: web
-          image: ghcr.io/yhsk9200/aporiax-pulse:sha-fc5d86f62b7b
+          image: ghcr.io/yhsk9200/aporiax-pulse:sha-639187de9374
           ports:
             - containerPort: 3000
           env:
