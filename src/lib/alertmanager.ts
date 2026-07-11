@@ -6,9 +6,15 @@ interface RawAlert {
   labels?: { alertname?: string; severity?: string };
 }
 
-// Watchdog is a permanently-firing meta-alert (Alertmanager pipeline
-// liveness check) — counting it would show a permanent false-positive on a
-// public page, so it's excluded here rather than left for the UI to filter.
+// Meta-alerts exist to drive the alerting machinery, not to report platform
+// state: Watchdog fires permanently (pipeline liveness check) and
+// InfoInhibitor fires whenever any severity=info alert exists purely to
+// inhibit its notifications. Counting either would show a false positive on
+// a public page, so both are excluded here rather than left for the UI to
+// filter. (InfoInhibitor was caught by live verification — it fired off a
+// CPUThrottlingHigh info alert during this feature's own rollout.)
+const META_ALERTS = new Set(["Watchdog", "InfoInhibitor"]);
+
 export async function fetchAlertSummary(): Promise<DataResult<AlertSummary>> {
   if (!ALERTMANAGER_URL) {
     return { ok: false, reason: "ALERTMANAGER_URL not configured (running outside cluster)" };
@@ -23,7 +29,7 @@ export async function fetchAlertSummary(): Promise<DataResult<AlertSummary>> {
     const bySeverity: Record<string, number> = {};
     let total = 0;
     for (const alert of alerts) {
-      if (alert.labels?.alertname === "Watchdog") continue;
+      if (META_ALERTS.has(alert.labels?.alertname ?? "")) continue;
       const severity = alert.labels?.severity ?? "unknown";
       bySeverity[severity] = (bySeverity[severity] ?? 0) + 1;
       total += 1;
