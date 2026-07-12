@@ -1,6 +1,10 @@
 export type NodeKind = "cluster-service" | "control-plane" | "external" | "self";
 export type EdgeKind = "ingress" | "oidc" | "db" | "query" | "read" | "alert" | "push" | "acme";
 
+// Data sources pulse itself calls while rendering — edges tagged with one of
+// these carry live verified/failed status from that render's DataResult.
+export type VerifiedBy = "prometheus" | "k8s-api" | "alertmanager";
+
 export interface TopologyNode {
   id: string;
   label: string;
@@ -15,6 +19,7 @@ export interface TopologyEdge {
   to: string;
   kind: EdgeKind;
   labelT?: number; // 0..1 position of the label along a cross-column edge (default 0.5) — used to dodge label collisions in dense regions
+  verifiedBy?: VerifiedBy; // set only on edges pulse exercises first-hand during its own render
 }
 
 // Layout is a fixed grid (col = left-to-right tier, row = vertical slot within
@@ -41,8 +46,9 @@ export const TOPOLOGY_EDGES: TopologyEdge[] = [
   { from: "traefik", to: "pulse", kind: "ingress" },
   { from: "traefik", to: "grafana", kind: "ingress" },
   { from: "traefik", to: "keycloak", kind: "ingress" },
-  { from: "pulse", to: "prometheus", kind: "query" },
-  { from: "pulse", to: "k8s-api", kind: "read", labelT: 0.8 },
+  { from: "pulse", to: "prometheus", kind: "query", verifiedBy: "prometheus" },
+  { from: "pulse", to: "alertmanager", kind: "query", labelT: 0.75, verifiedBy: "alertmanager" },
+  { from: "pulse", to: "k8s-api", kind: "read", labelT: 0.8, verifiedBy: "k8s-api" },
   { from: "grafana", to: "prometheus", kind: "query" },
   { from: "grafana", to: "keycloak", kind: "oidc" },
   { from: "keycloak", to: "postgres", kind: "db" },

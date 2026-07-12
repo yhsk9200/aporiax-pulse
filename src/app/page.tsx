@@ -35,7 +35,7 @@ export default async function HomePage() {
       </header>
 
       <MetricPanel result={metrics} />
-      <TopologyGraph result={apps} />
+      <TopologyGraph apps={apps} metrics={metrics} alerts={alerts} />
       <AppGrid result={apps} />
       <DeployFeed result={deployEvents} />
       <CertPanel certs={certs} />

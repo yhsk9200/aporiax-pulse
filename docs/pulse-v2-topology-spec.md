@@ -180,3 +180,8 @@ export interface AlertSummary { total: number; bySeverity: Record<string, number
 2. `k8s.ts` history 파싱 확장 + `DeployFeed`
 3. `alertmanager.ts` + `AlertChip` + `app.yaml` env
 4. `page.tsx` 조립 + 검증 게이트 §8
+
+## 10. 변경 이력
+
+- **2026-07-11 v2 출하**: §1~9 구현 완료. 라이브 검증에서 스펙 공백 1건 발견·수정 — §5.1의 메타 알림 제외가 Watchdog만 지정했으나 InfoInhibitor(info 알림 존재 시 firing하는 억제용 메타 알림)도 같은 부류. 칩은 `META_ALERTS` 셋으로 둘 다 제외.
+- **2026-07-12 v2.1**: ① 노드 확대(168×52, 폰트 14px) — 가독성 피드백 반영. ② **1st-party 엣지 라이브 상태**: pulse 자신이 렌더 중 실제 호출한 엣지 3개(→prometheus/k8s API/alertmanager)만 해당 렌더의 `DataResult`로 성공(초록)/실패(빨강) 표시 — 추가 요청 0. 남의 연결(oidc, db 등)의 실측은 메시/프로빙 필요라 기각 유지, 메트릭 추정 절충안도 실측/추정/선언 3단계 혼재라 기각(판단 기록). ③ 선언-실제 드리프트 수정: 알림 칩 도입으로 생긴 pulse→alertmanager 호출이 토폴로지에 누락 → 엣지 추가.

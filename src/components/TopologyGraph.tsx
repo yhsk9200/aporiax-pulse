@@ -1,6 +1,6 @@
 import { Panel } from "./Panel";
-import { TOPOLOGY_NODES, TOPOLOGY_EDGES, type TopologyNode } from "@/lib/topology";
-import type { ArgoApp, DataResult, Health } from "@/lib/types";
+import { TOPOLOGY_NODES, TOPOLOGY_EDGES, type TopologyNode, type VerifiedBy } from "@/lib/topology";
+import type { AlertSummary, ArgoApp, ClusterMetrics, DataResult, Health } from "@/lib/types";
 
 const HEALTH_FILL: Record<Health, string> = {
   Healthy: "fill-emerald-500",
@@ -11,12 +11,12 @@ const HEALTH_FILL: Record<Health, string> = {
   Unknown: "fill-neutral-400",
 };
 
-const BOX_W = 140;
-const BOX_H = 40;
-const COL_X = [80, 280, 480, 680, 880];
-const ROW_Y = [60, 140, 220, 300, 380];
-const VIEWBOX_W = 960;
-const VIEWBOX_H = 420;
+const BOX_W = 168;
+const BOX_H = 52;
+const COL_X = [100, 320, 540, 760, 980];
+const ROW_Y = [66, 154, 242, 330, 418];
+const VIEWBOX_W = 1080;
+const VIEWBOX_H = 470;
 
 function pos(node: TopologyNode) {
   return { x: COL_X[node.col], y: ROW_Y[node.row] };
@@ -46,11 +46,27 @@ function edgeGeometry(
   };
 }
 
-export function TopologyGraph({ result }: { result: DataResult<ArgoApp[]> }) {
+export function TopologyGraph({
+  apps,
+  metrics,
+  alerts,
+}: {
+  apps: DataResult<ArgoApp[]>;
+  metrics: DataResult<ClusterMetrics>;
+  alerts: DataResult<AlertSummary>;
+}) {
   const healthByApp = new Map<string, Health>();
-  if (result.ok) {
-    for (const app of result.data) healthByApp.set(app.name, app.health);
+  if (apps.ok) {
+    for (const app of apps.data) healthByApp.set(app.name, app.health);
   }
+
+  // Live status for edges pulse exercised while rendering this very page —
+  // no extra requests, just the outcome of the fetches the panels already use.
+  const verifiedOk: Record<VerifiedBy, boolean> = {
+    prometheus: metrics.ok,
+    "k8s-api": apps.ok,
+    alertmanager: alerts.ok,
+  };
 
   const nodeById = new Map(TOPOLOGY_NODES.map((n) => [n.id, n]));
 
@@ -59,13 +75,19 @@ export function TopologyGraph({ result }: { result: DataResult<ArgoApp[]> }) {
       <div className="overflow-x-auto">
         <svg
           viewBox={`0 0 ${VIEWBOX_W} ${VIEWBOX_H}`}
-          className="min-w-[720px]"
+          className="min-w-[880px]"
           role="img"
           aria-label="Platform service topology"
         >
           <defs>
             <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
               <path d="M 0 0 L 10 5 L 0 10 z" className="fill-neutral-400 dark:fill-neutral-600" />
+            </marker>
+            <marker id="arrow-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+              <path d="M 0 0 L 10 5 L 0 10 z" className="fill-emerald-500" />
+            </marker>
+            <marker id="arrow-fail" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+              <path d="M 0 0 L 10 5 L 0 10 z" className="fill-red-500" />
             </marker>
           </defs>
 
@@ -74,20 +96,28 @@ export function TopologyGraph({ result }: { result: DataResult<ArgoApp[]> }) {
             const to = nodeById.get(edge.to);
             if (!from || !to) return null;
             const { path, labelX, labelY } = edgeGeometry(from, to, edge.labelT);
+            const verified = edge.verifiedBy ? verifiedOk[edge.verifiedBy] : undefined;
+            const stroke =
+              verified === undefined
+                ? "stroke-neutral-300 dark:stroke-neutral-700"
+                : verified
+                  ? "stroke-emerald-500/80"
+                  : "stroke-red-500/80";
+            const marker = verified === undefined ? "arrow" : verified ? "arrow-ok" : "arrow-fail";
             return (
               <g key={`${edge.from}-${edge.to}`}>
                 <path
                   d={path}
                   fill="none"
-                  className="stroke-neutral-300 dark:stroke-neutral-700"
-                  strokeWidth={1.5}
-                  markerEnd="url(#arrow)"
+                  className={stroke}
+                  strokeWidth={verified === undefined ? 1.5 : 2}
+                  markerEnd={`url(#${marker})`}
                 />
                 <text
                   x={labelX}
-                  y={labelY - 6}
+                  y={labelY - 7}
                   textAnchor="middle"
-                  className="fill-neutral-400 text-[10px] dark:fill-neutral-500"
+                  className="fill-neutral-400 text-[11px] dark:fill-neutral-500"
                 >
                   {edge.kind}
                 </text>
@@ -107,31 +137,31 @@ export function TopologyGraph({ result }: { result: DataResult<ArgoApp[]> }) {
                   y={y - BOX_H / 2}
                   width={BOX_W}
                   height={BOX_H}
-                  rx={6}
+                  rx={8}
                   className={
                     isSelf
                       ? "fill-white stroke-neutral-900 dark:fill-neutral-950 dark:stroke-neutral-100"
                       : "fill-white stroke-neutral-200 dark:fill-neutral-950 dark:stroke-neutral-800"
                   }
                   strokeWidth={isSelf ? 2 : 1}
-                  strokeDasharray={isExternal ? "4 3" : undefined}
+                  strokeDasharray={isExternal ? "5 4" : undefined}
                 />
                 {node.argoApp && (
                   <circle
-                    cx={x - BOX_W / 2 + 14}
+                    cx={x - BOX_W / 2 + 17}
                     cy={y}
-                    r={4}
+                    r={5}
                     className={HEALTH_FILL[health ?? "Unknown"]}
                   />
                 )}
                 <text
-                  x={node.argoApp ? x + 6 : x}
-                  y={y + 4}
+                  x={node.argoApp ? x + 8 : x}
+                  y={y + 5}
                   textAnchor="middle"
                   className={
                     isExternal
-                      ? "fill-neutral-400 text-xs italic dark:fill-neutral-500"
-                      : "fill-neutral-900 text-xs dark:fill-neutral-100"
+                      ? "fill-neutral-400 text-sm italic dark:fill-neutral-500"
+                      : "fill-neutral-900 text-sm dark:fill-neutral-100"
                   }
                 >
                   {node.label}
@@ -150,7 +180,8 @@ export function TopologyGraph({ result }: { result: DataResult<ArgoApp[]> }) {
         >
           topology.ts
         </a>
-        ; node health is live from ArgoCD.
+        ; node health is live from ArgoCD. Green edges were exercised by this page&apos;s own render
+        (red = attempted and failed); the rest are declared architecture.
       </p>
     </Panel>
   );
